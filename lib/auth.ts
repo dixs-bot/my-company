@@ -1,15 +1,12 @@
 import { supabase } from "./supabase";
 
-/**
- * Converts a standard corporate Employee ID into a standard email-like login identifier
- * recognized by Supabase Auth (since Supabase requires an email address as standard).
- * E.g., "EMP2026101" -> "emp2026101@mycompanyerp.internal"
- */
 export function convertEmployeeIdToEmail(employeeId: string): string {
   const sanitized = employeeId.trim().toLowerCase();
+
   if (sanitized.includes("@")) {
-    return sanitized; // Already an email format
+    return sanitized;
   }
+
   return `${sanitized}@mycompanyerp.internal`;
 }
 
@@ -26,66 +23,71 @@ export interface AuthResponse {
   error?: string;
 }
 
-/**
- * Perform login using Employee ID (converted to email) and Password.
- * Provides a highly reliable mock fallback when credentials are mock or when
- * Supabase environment variables are unconfigured. This ensures the premium UI
- * is instantly demo-able out-of-the-box.
- */
-export async function signInWithEmployeeId(employeeId: string, password: string): Promise<AuthResponse> {
+// Check if Supabase ENV exists
+function isSupabaseConfigured(): boolean {
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
+export async function signInWithEmployeeId(
+  employeeId: string,
+  password: string
+): Promise<AuthResponse> {
+
   const email = convertEmployeeIdToEmail(employeeId);
 
-  // Check if Supabase keys are default/missing
-  const isSupabaseConfigured = 
-    process.env.NEXT_PUBLIC_SUPABASE_URL && 
-    process.env.NEXT_PUBLIC_SUPABASE_URL !== "https://placeholder-project.supabase.co" &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== "placeholder-anon-key";
+  // DEMO MODE
+  if (!isSupabaseConfigured()) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
-  if (!isSupabaseConfigured) {
-    // Elegant simulation delay for realistic UX/UI state transitions
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const emp = employeeId.trim().toUpperCase();
 
-    // Demo Credentials fallback
-    const normEmpId = employeeId.trim().toUpperCase();
-    if ((normEmpId === "EMP100" || normEmpId === "ADMIN") && password === "password123") {
+    if (
+      (emp === "ADMIN" || emp === "EMP100") &&
+      password === "password123"
+    ) {
       return {
         success: true,
         user: {
-          id: "mock-uid-001",
-          employeeId: normEmpId,
-          email: email,
-          fullName: "Alexander Sterling",
-          role: "Chief Technology Officer",
-          department: "Executive Management",
+          id: "demo-admin",
+          employeeId: emp,
+          email,
+          fullName: "Administrator",
+          role: "Super Admin",
+          department: "Management",
         },
-      };
-    } else if (password.length >= 6) {
-      // Allow general demo-mode authentication for any employee ID if password is correct length
-      return {
-        success: true,
-        user: {
-          id: `mock-uid-${Math.random().toString(36).substr(2, 9)}`,
-          employeeId: normEmpId,
-          email: email,
-          fullName: `Corporate User (${normEmpId})`,
-          role: "Senior Operations Specialist",
-          department: "Business Operations",
-        },
-      };
-    } else {
-      return {
-        success: false,
-        error: "Invalid password. For demo mode, try using Employee ID 'EMP100' with password 'password123' or enter any password of at least 6 characters.",
       };
     }
+
+    if (password.length >= 6) {
+      return {
+        success: true,
+        user: {
+          id: crypto.randomUUID(),
+          employeeId: emp,
+          email,
+          fullName: `Employee ${emp}`,
+          role: "Staff",
+          department: "Operations",
+        },
+      };
+    }
+
+    return {
+      success: false,
+      error: "Employee ID atau Password salah.",
+    };
   }
 
+  // REAL SUPABASE LOGIN
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
     if (error) {
       return {
@@ -94,40 +96,39 @@ export async function signInWithEmployeeId(employeeId: string, password: string)
       };
     }
 
-    // Retrieve metadata or parse username
     return {
       success: true,
       user: {
-        id: data.user?.id || "unknown",
-        employeeId: employeeId.trim().toUpperCase(),
-        email: data.user?.email || email,
-        fullName: data.user?.user_metadata?.full_name || "Corporate Employee",
-        role: data.user?.user_metadata?.role || "Team Associate",
-        department: data.user?.user_metadata?.department || "Operations",
+        id: data.user.id,
+        employeeId: employeeId.toUpperCase(),
+        email: data.user.email || email,
+        fullName:
+          data.user.user_metadata?.full_name ??
+          "Corporate Employee",
+        role:
+          data.user.user_metadata?.role ??
+          "Employee",
+        department:
+          data.user.user_metadata?.department ??
+          "General",
       },
     };
   } catch (err: any) {
     return {
       success: false,
-      error: err.message || "An unexpected error occurred during corporate sign-in.",
+      error:
+        err?.message ||
+        "Terjadi kesalahan saat login.",
     };
   }
 }
 
-/**
- * Handle sign out
- */
 export async function signOut(): Promise<boolean> {
-  const isSupabaseConfigured = 
-    process.env.NEXT_PUBLIC_SUPABASE_URL && 
-    process.env.NEXT_PUBLIC_SUPABASE_URL !== "https://placeholder-project.supabase.co" &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== "placeholder-anon-key";
-
-  if (!isSupabaseConfigured) {
+  if (!isSupabaseConfigured()) {
     return true;
   }
 
   const { error } = await supabase.auth.signOut();
+
   return !error;
 }
