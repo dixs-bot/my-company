@@ -1,6 +1,8 @@
 import { supabase } from "./supabase";
 
-export function convertEmployeeIdToEmail(employeeId: string): string {
+export function convertEmployeeIdToEmail(
+  employeeId: string
+): string {
   const sanitized = employeeId.trim().toLowerCase();
 
   if (sanitized.includes("@")) {
@@ -10,24 +12,25 @@ export function convertEmployeeIdToEmail(employeeId: string): string {
   return `${sanitized}@mycompanyerp.internal`;
 }
 
+export interface AuthUser {
+  id: string;
+  employeeId: string;
+  email: string;
+  fullName: string;
+  role: string;
+  department: string;
+}
+
 export interface AuthResponse {
   success: boolean;
-  user?: {
-    id: string;
-    employeeId: string;
-    email: string;
-    fullName: string;
-    role: string;
-    department: string;
-  };
+  user?: AuthUser;
   error?: string;
 }
 
-// Check if Supabase ENV exists
 function isSupabaseConfigured(): boolean {
-  return !!(
+  return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
 }
 
@@ -35,17 +38,23 @@ export async function signInWithEmployeeId(
   employeeId: string,
   password: string
 ): Promise<AuthResponse> {
+  const email =
+    convertEmployeeIdToEmail(employeeId);
 
-  const email = convertEmployeeIdToEmail(employeeId);
-
+  // ==========================
   // DEMO MODE
+  // ==========================
   if (!isSupabaseConfigured()) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) =>
+      setTimeout(resolve, 1000)
+    );
 
-    const emp = employeeId.trim().toUpperCase();
+    const emp =
+      employeeId.trim().toUpperCase();
 
     if (
-      (emp === "ADMIN" || emp === "EMP100") &&
+      (emp === "ADMIN" ||
+        emp === "EMP100") &&
       password === "password123"
     ) {
       return {
@@ -54,8 +63,9 @@ export async function signInWithEmployeeId(
           id: "demo-admin",
           employeeId: emp,
           email,
-          fullName: "Administrator",
-          role: "Super Admin",
+          fullName:
+            "System Administrator",
+          role: "super_admin",
           department: "Management",
         },
       };
@@ -69,47 +79,92 @@ export async function signInWithEmployeeId(
           employeeId: emp,
           email,
           fullName: `Employee ${emp}`,
-          role: "Staff",
-          department: "Operations",
+          role: "employee",
+          department: "General",
         },
       };
     }
 
     return {
       success: false,
-      error: "Employee ID atau Password salah.",
+      error:
+        "Invalid Employee ID or Password.",
     };
   }
 
-  // REAL SUPABASE LOGIN
+  // ==========================
+  // REAL LOGIN
+  // ==========================
   try {
-    const { data, error } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    const {
+      data: authData,
+      error: authError,
+    } =
+      await supabase.auth.signInWithPassword(
+        {
+          email,
+          password,
+        }
+      );
 
-    if (error) {
+    if (
+      authError ||
+      !authData.user
+    ) {
       return {
         success: false,
-        error: error.message,
+        error:
+          authError?.message ||
+          "Login failed.",
+      };
+    }
+
+    const {
+      data: profile,
+      error: profileError,
+    } = await supabase
+      .from("employees")
+      .select(
+        `
+          id,
+          employee_id,
+          full_name,
+          email,
+          role,
+          departments(name)
+        `
+      )
+      .eq(
+        "auth_user_id",
+        authData.user.id
+      )
+      .single();
+
+    if (
+      profileError ||
+      !profile
+    ) {
+      return {
+        success: false,
+        error:
+          "Employee profile not found.",
       };
     }
 
     return {
       success: true,
       user: {
-        id: data.user.id,
-        employeeId: employeeId.toUpperCase(),
-        email: data.user.email || email,
+        id: profile.id,
+        employeeId:
+          profile.employee_id,
+        email: profile.email,
         fullName:
-          data.user.user_metadata?.full_name ??
-          "Corporate Employee",
-        role:
-          data.user.user_metadata?.role ??
-          "Employee",
+          profile.full_name,
+        role: profile.role,
         department:
-          data.user.user_metadata?.department ??
+          (
+            profile as any
+          ).departments?.name ??
           "General",
       },
     };
@@ -118,7 +173,7 @@ export async function signInWithEmployeeId(
       success: false,
       error:
         err?.message ||
-        "Terjadi kesalahan saat login.",
+        "An unexpected error occurred.",
     };
   }
 }
@@ -128,7 +183,8 @@ export async function signOut(): Promise<boolean> {
     return true;
   }
 
-  const { error } = await supabase.auth.signOut();
+  const { error } =
+    await supabase.auth.signOut();
 
   return !error;
 }
