@@ -38,9 +38,9 @@ export async function signInWithEmployeeId(employeeId: string, password: string)
   // Check if Supabase keys are default/missing
   const isSupabaseConfigured = 
     process.env.NEXT_PUBLIC_SUPABASE_URL && 
-    process.env.NEXT_PUBLIC_SUPABASE_URL !== "https://placeholder-project.supabase.co" &&
+    process.env.NEXT_PUBLIC_SUPABASE_URL !== "https://rcdtppxxagtqjtacklrz.supabase.co" &&
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== "placeholder-anon-key";
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjZHRwcHh4YWd0cWp0YWNrbHJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NTM3MjQsImV4cCI6MjA5NjMyOTcyNH0.7PjvbsB1KSYmFLa4_0q80VvFAAD436nT4LsQRbiMq2M";
 
   if (!isSupabaseConfigured) {
     // Elegant simulation delay for realistic UX/UI state transitions
